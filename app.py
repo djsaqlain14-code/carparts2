@@ -12,15 +12,28 @@ def get_price_from_carparts(query):
     try:
         r = requests.get(search_url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, 'html.parser')
-        price_tag = soup.find("span", {"class": "actual-price"})
-        if price_tag:
-            price_text = price_tag.text.strip().replace("$", "").replace(",", "")
-            price = float(price_text)
-            return price
-        else:
-            return None
-    except:
+        
+        # Try common price selectors in order:
+        price_selectors = [
+            "span.actual-price",
+            "span.price-sales",
+            "div.price",
+            "span.price",
+        ]
+        
+        for selector in price_selectors:
+            price_tag = soup.select_one(selector)
+            if price_tag:
+                price_text = price_tag.text.strip().replace("$", "").replace(",", "")
+                try:
+                    price = float(price_text)
+                    return price
+                except ValueError:
+                    continue
         return None
+    except Exception as e:
+        return None
+
 
 def add_gp(price_usd):
     gp_inr = random.randint(100, 250)
@@ -88,3 +101,4 @@ if st.session_state.step == 4:
 
 if st.session_state.step == 99:
     st.write("**Call ended.**")
+
