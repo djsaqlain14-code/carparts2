@@ -1,10 +1,18 @@
 import streamlit as st
+import openai
 import requests
 from bs4 import BeautifulSoup
 import random
 
-def inr_to_usd(inr):
-    return round(inr / 82, 2)
+# Replace with your OpenAI key
+openai.api_key = "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Currency conversion approx: 1 USD = 83 INR
+INR_TO_USD = 1/83
+
+# ---------------------
+# Functions
+# ---------------------
 
 def get_price_from_carparts(query):
     search_url = f"https://www.carparts.com/search?q={query.replace(' ', '+')}"
@@ -13,14 +21,12 @@ def get_price_from_carparts(query):
         r = requests.get(search_url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        # Try common price selectors in order:
         price_selectors = [
             "span.actual-price",
             "span.price-sales",
             "div.price",
             "span.price",
         ]
-        
         for selector in price_selectors:
             price_tag = soup.select_one(selector)
             if price_tag:
@@ -31,74 +37,40 @@ def get_price_from_carparts(query):
                 except ValueError:
                     continue
         return None
-    except Exception as e:
+    except Exception:
         return None
 
-
-def add_gp(price_usd):
+def calculate_gp():
+    # Random GP in INR converted to USD
     gp_inr = random.randint(100, 250)
-    gp_usd = inr_to_usd(gp_inr)
-    final_price = round(price_usd + gp_usd, 2)
-    return final_price
+    return round(gp_inr * INR_TO_USD, 2)
 
-def detect_intent(text):
-    text = text.lower()
-    if "where" in text or "order" in text or "ship" in text:
-        return "order_status"
+# ---------------------
+# Streamlit UI
+# ---------------------
+
+st.set_page_config(page_title="Car Parts Price Bot Demo", page_icon="🚗")
+st.title("🚗 Car Parts Price Bot Demo")
+
+st.markdown("""
+Type your car part request like:  
+**2018 Toyota Camry alternator**  
+Then click **Get Price**.
+""")
+
+part_query = st.text_input("Enter part details:", key="part_input")
+
+if st.button("Get Price", key="get_price_btn"):
+    if not part_query.strip():
+        st.warning("Please enter a part name.")
     else:
-        return "parts_search"
-
-st.title("📞 Sam Used Auto Parts - Call Simulator")
-
-if "step" not in st.session_state:
-    st.session_state.step = 1
-    st.session_state.intent = None
-    st.session_state.make_model_year_part = None
-
-if st.session_state.step == 1:
-    st.write("**Bot:** Sam Used Auto Parts, how can we help you today?")
-    user_input = st.text_input("You say:")
-    if user_input:
-        intent = detect_intent(user_input)
-        st.session_state.intent = intent
-        if intent == "order_status":
-            st.session_state.step = 10
-        else:
-            st.session_state.step = 2
-
-if st.session_state.step == 10:
-    st.write("**Bot:** Please hold while I connect you to our order support line.")
-    st.stop()
-
-if st.session_state.step == 2:
-    st.write("**Bot:** Sure! Please tell me the make, model, year, and the part you need.")
-    user_input = st.text_input("You say:")
-    if user_input:
-        st.session_state.make_model_year_part = user_input
-        st.session_state.step = 3
-
-if st.session_state.step == 3:
-    query = st.session_state.make_model_year_part
-    st.write(f"**Searching CarParts.com for:** {query}")
-    price = get_price_from_carparts(query)
-    if price:
-        final_price = add_gp(price)
-        st.write(f"**Bot:** We have an A-grade {query} for ${final_price}. Would you like to place the order?")
-        st.session_state.step = 4
-    else:
-        st.write("**Bot:** Sorry, we couldn't find that part. Please try again or contact support.")
-        st.session_state.step = 2
-
-if st.session_state.step == 4:
-    user_input = st.text_input("You say:")
-    if user_input:
-        if user_input.lower() in ["yes", "yeah", "yup", "sure", "order"]:
-            st.write("**Bot:** Great! I'll proceed with your order and confirm details shortly. Thank you for choosing Sam Used Auto Parts!")
-            st.session_state.step = 99
-        else:
-            st.write("**Bot:** Okay, let me know if you need anything else.")
-            st.session_state.step = 2
-
-if st.session_state.step == 99:
-    st.write("**Call ended.**")
-
+        with st.spinner("Searching carparts.com..."):
+            selling_price = get_price_from_carparts(part_query)
+            if selling_price:
+                gp = calculate_gp()
+                final_price = selling_price + gp
+                st.success(f"We have an A-grade {part_query} for ${selling_price:.2f}.")
+                st.info(f"Our added profit is approx ${gp:.2f}, so total price for you is ${final_price:.2f}.")
+                st.write("Would you like to order?")
+            else:
+                st.error("Sorry, we couldn't find that part. Please try again or contact support.")
